@@ -39,6 +39,9 @@ class Lemon8TravelCLI:
     real user experiences and reviews from Lemon8 posts.
     """
     
+    # Constants
+    SOURCES_MULTIPLIER = 3  # Try up to 3x the requested number of posts
+    
     # Travel content categories
     CONTENT_TYPES = {
         "1": {"name": "Everything", "keywords": ""},
@@ -101,7 +104,7 @@ class Lemon8TravelCLI:
         # Combine original query with content type keywords if specific type selected
         enhanced_query = f"{query} {content_type['keywords']}" if content_type['keywords'] else query
         
-        max_attempts = min_posts * 3  # Try up to 3x the requested number of posts
+        max_attempts = min_posts * self.SOURCES_MULTIPLIER
         attempt_count = 0
         
         while to_scrape and relevant_count < min_posts and attempt_count < max_attempts:
@@ -128,6 +131,7 @@ class Lemon8TravelCLI:
                     })
                     results.append(result)
                     
+                    # Update progress tracking
                     if is_relevant:
                         relevant_count += 1
                         print(f"✅ [{relevant_count}/{min_posts}] Relevant content found (score: {score:.2f})")
@@ -143,6 +147,9 @@ class Lemon8TravelCLI:
                     else:
                         print(f"⏩ Content not relevant (score: {score:.2f})")
                         print(f"📝 Reason: {reason}")
+                    
+                    # Always show progress regardless of relevance
+                    print(f"📊 Progress: {attempt_count}/{max_attempts} sources reviewed ({(attempt_count/max_attempts)*100:.1f}%)")
                 else:
                     print(f"❌ Failed to analyze post")
                     
@@ -193,8 +200,11 @@ class Lemon8TravelCLI:
             
             # Start the process
             print(f"\n🚀 Generating...")
+            print(f"🔍 Query: {query}")
             print(f"📋 Focus: {content_type['name']}")
             print(f"🎯 Target: {num_posts}+ authentic sources")
+            print(f"🔗 Maximum sources: {num_posts * self.SOURCES_MULTIPLIER} ({self.SOURCES_MULTIPLIER}x)")
+            print(f"🔗 Run ID: {self.run_id}")
             print(f"📂 Output directory: {self.output_dir}")
             
             # Find relevant posts
@@ -215,9 +225,11 @@ class Lemon8TravelCLI:
             
             print(f"\n📊 Content Analysis Summary")
             print("=" * 30)
-            print(f"✅ Sources analyzed: {successful}")
-            print(f"🎯 Relevant content: {relevant}")
+            target_total = num_posts * self.SOURCES_MULTIPLIER  # Total sources to review
+            print(f"✅ Sources analyzed: {successful}/{target_total}")
+            print(f"🎯 Relevant content: {relevant}/{num_posts}")
             print(f"⭐ Average relevance: {sum(r['relevance_score'] for r in relevant_results) / relevant:.2f}")
+            print(f"📊 Progress: {(successful/target_total)*100:.1f}% of required sources reviewed")
             
             if relevant > 0:
                 print("\n📝 Generating detailed travel insights...")

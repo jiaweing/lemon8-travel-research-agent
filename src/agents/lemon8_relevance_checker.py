@@ -15,7 +15,7 @@ class Lemon8RelevanceCheckerAgent:
         
         self.llm = ChatOpenAI(
             model_name="gpt-4o-mini",
-            temperature=0.3,  # Lower temperature for more consistent evaluations
+            temperature=0.2,  # Very low temperature for consistent evaluations
         )
         
         self.relevance_prompt = PromptTemplate(
@@ -25,10 +25,14 @@ class Lemon8RelevanceCheckerAgent:
 CONTENT:
 {content}
 
-Consider:
-1. How directly does this content address the query?
-2. What specific, relevant information does it provide?
-3. Is the information based on firsthand experience or reliable sources?
+CRITICAL VALIDATION:
+1. First extract primary location(s) mentioned in the content
+2. Check if those locations match or relate to the query location
+3. Verify the content has actual meaningful information about those locations
+4. REJECT content that:
+   - Only mentions query location in metadata/UI
+   - Has no specific location details/tips/recommendations
+   - Is about a completely different location
 
 Evaluate:
 1. Relevance (0-1): How well does this content match the query intent?
@@ -69,12 +73,24 @@ Examples of good explanations:
             # Read content file
             with open(content_path, 'r', encoding='utf-8') as f:
                 content = f.read()
+
+            # Trim content if it starts with Related posts/topics
+            for marker in ["# Related posts", "# Related topics"]:
+                if marker in content:
+                    content = content[:content.index(marker)].strip()
             
             # Format prompt
             prompt = self.relevance_prompt.format(
                 content=content,
                 query=query
             )
+            
+            # Debug log the content being checked
+            logger.debug("🔍 CHECKING CONTENT:")
+            logger.debug("-" * 80)
+            logger.debug(content[:500] + "..." if len(content) > 500 else content)
+            logger.debug("-" * 80)
+            logger.debug(f"🔎 QUERY: {query}")
             
             # Get evaluation
             response = self.llm.invoke(prompt)

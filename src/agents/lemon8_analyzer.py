@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional
 import os
 from datetime import datetime
 import re
@@ -32,37 +32,128 @@ class Lemon8AnalyzerAgent:
         )
         self.llm = ChatOpenAI(
             model_name=Config.MODEL_NAME,
-            temperature=0.7,
+            temperature=0.2,  # Lower temperature for stricter adherence to instructions
         )
 
-    def _get_content_title(self, content_path: str) -> str:
-        """Extract content title from metadata file"""
+    def _extract_metadata(self, content: str, content_path: str) -> Dict[str, str]:
+        """Extract metadata from both content frontmatter and info file"""
+        metadata = {}
+
         try:
-            # Get hash from content path
+            # First try to get metadata from content frontmatter
+            if content.startswith('---'):
+                end_idx = content.find('\n---', 3)
+                if end_idx != -1:
+                    frontmatter = content[3:end_idx]
+                    for line in frontmatter.split('\n'):
+                        if ':' in line:
+                            key, value = line.split(':', 1)
+                            metadata[key.strip()] = value.strip()
+
+            # Then try to get additional metadata from info file
             content_hash = os.path.basename(content_path).split('_')[0]
-            
-            # Find corresponding info file
             info_path = os.path.join(os.path.dirname(content_path), f"{content_hash}_info.txt")
             
             if os.path.exists(info_path):
                 with open(info_path, 'r', encoding='utf-8') as f:
                     for line in f:
-                        if line.startswith('Title:'):
-                            title = line.replace('Title:', '').strip()
-                            if title and title.lower() != 'no title':
-                                return title
-            
-            logger.warning(f"⚠️ No title found in metadata for {content_path}")
-            return "untitled"
+                        if ':' in line:
+                            key, value = line.split(':', 1)
+                            # Info file takes precedence over frontmatter
+                            metadata[key.strip()] = value.strip()
+
+            return metadata
             
         except Exception as e:
-            logger.error(f"❌ Failed to get content title: {str(e)}")
-            return "untitled"
+            logger.error(f"❌ Failed to get metadata: {str(e)}")
+            return {}
+
+    def _extract_main_content(self, content: str) -> str:
+        """Extract just the main post content, focusing on the actual post text"""
+        try:
+            # Skip frontmatter
+            if content.startswith('---'):
+                end_idx = content.find('\n---', 3)
+                if end_idx != -1:
+                    content = content[end_idx + 4:].strip()
+
+            # Extract the main content
+            logger.debug("🔍 Starting content extraction")
+            lines = content.split('\n')
+            main_content_lines = []
+            post_title = None
+            content_started = False
+            
+            # First find the main post title
+            for line in lines:
+                if line.startswith('# ') and not line.startswith('## '):
+                    post_title = line
+                    content_started = True
+                    logger.debug(f"📑 Found post title: {line}")
+                    break
+
+            # Then extract the actual content
+            if content_started:
+                logger.debug("📝 Extracting main content")
+                # Process each line after the title
+                for line in lines[lines.index(post_title) + 1:]:
+                    # Stop at marker sections
+                    if any(marker in line for marker in [
+                        '[#',  # Hashtags
+                        'You may also like',
+                        'Related posts',
+                        'See more comments',
+                        'See more on the app',
+                        '## Related',
+                        '## Comments'
+                    ]):
+                        logger.debug(f"🛑 Stopped at marker: {line[:50]}")
+                        break
+
+                    # Skip UI elements and navigation
+                    if any(skip in line for skip in [
+                        'lemon8-app.com',
+                        'Follow',
+                        'followers',
+                        'Open Lemon8',
+                        'See more',
+                        '1/'
+                    ]):
+                        continue
+
+                    # Add the content line
+                    main_content_lines.append(line)
+
+            # Clean up the extracted content
+            content = '\n'.join([post_title] + main_content_lines)
+            content = re.sub(r'\n{3,}', '\n\n', content)  # Clean up multiple newlines
+            content = re.sub(r'!\[.*?\]\(.*?\)', '', content)  # Remove image markdown
+            content = re.sub(r'\[(?!#).*?\]\(.*?\)', '', content)  # Remove links except hashtags
+            # Clean up any region identifiers that might be misleading the analysis
+            content = re.sub(r'\?region=[a-z]{2}', '', content)  # Remove region parameters
+            content = re.sub(r'Open in (the )?Lemon8.*$', '', content, flags=re.MULTILINE)  # Remove app references
+            content = re.sub(r'@\w+\s+\|\s+\w+\s+follower.*$', '', content, flags=re.MULTILINE)  # Remove follower info
+            content = content.strip()
+
+            logger.debug(f"📊 Content statistics:")
+            logger.debug(f"- Original length: {len(content)}")
+            logger.debug(f"- Line count: {len(content.split(chr(10)))}")
+            logger.debug("📄 Content preview:")
+            logger.debug("-" * 40)
+            logger.debug(content[:500] + "..." if len(content) > 500 else content)
+            logger.debug("-" * 40)
+            
+            logger.info(f"📄 Extracted main content length: {len(content)} characters")
+            return content.strip()
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to extract main content: {str(e)}")
+            return ""
 
     def _clean_title_for_filename(self, title: str) -> str:
         """Clean title for use in filenames while preserving meaning"""
         # Remove invalid characters but preserve spaces and meaningful punctuation
-        safe_chars = set(" -_()[]{}'")  # Allow these special characters
+        safe_chars = set(" -_()[]{}'")
         cleaned = "".join(c if c.isalnum() or c in safe_chars else "_" for c in title)
         
         # Clean up multiple underscores/spaces
@@ -71,43 +162,16 @@ class Lemon8AnalyzerAgent:
         while "  " in cleaned:
             cleaned = cleaned.replace("  ", " ")
             
-        # Remove leading/trailing spaces and underscores
         cleaned = cleaned.strip(" _")
         
-        # If title becomes empty after cleaning, return untitled
         if not cleaned:
             return "untitled"
             
-        # Limit length while trying to keep whole words
         if len(cleaned) > 100:
             words = cleaned[:100].rsplit(' ', 1)[0]
             cleaned = words.strip(" _")
             
         return cleaned
-
-    def _extract_frontmatter(self, content: str) -> Tuple[Dict[str, str], str]:
-        """Extract YAML frontmatter and remaining content"""
-        frontmatter = {}
-        main_content = content
-        
-        # Check for YAML frontmatter
-        if content.startswith('---'):
-            try:
-                # Find end of frontmatter
-                end_idx = content.find('\n---', 3)
-                if end_idx != -1:
-                    frontmatter_str = content[3:end_idx]
-                    main_content = content[end_idx + 4:].strip()
-                    
-                    # Parse frontmatter
-                    for line in frontmatter_str.split('\n'):
-                        if ':' in line:
-                            key, value = line.split(':', 1)
-                            frontmatter[key.strip()] = value.strip()
-            except Exception as e:
-                logger.warning(f"Failed to parse frontmatter: {str(e)}")
-        
-        return frontmatter, main_content
 
     async def analyze_content(self, content_path: str) -> str:
         """Analyze content and generate markdown report"""
@@ -118,13 +182,20 @@ class Lemon8AnalyzerAgent:
             with open(content_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            # Extract frontmatter and main content
-            frontmatter, main_content = self._extract_frontmatter(content)
+            # Extract metadata from both content and info file
+            metadata = self._extract_metadata(content, content_path)
             
-            # Extract and clean title from metadata
-            raw_title = frontmatter.get('title') or self._get_content_title(content_path)
-            
-            # Format title: remove " | Gallery posted by" and " | Lemon8", add "by" before author
+            # Extract main content
+            main_content = self._extract_main_content(content)
+            if not main_content:
+                raise ValueError("Failed to extract main post content")
+                
+            # Get title with fallbacks
+            raw_title = (
+                metadata.get('title') or  # From frontmatter
+                metadata.get('Title') or  # From info file
+                'Untitled Post'  # Default
+            )
             title_parts = raw_title.split(' | ')
             if len(title_parts) >= 3:
                 post_title = title_parts[0]
@@ -134,43 +205,34 @@ class Lemon8AnalyzerAgent:
                 title = raw_title
                 
             safe_title = self._clean_title_for_filename(title)
+            source_url = metadata.get('source')
             
-            # Get source URL from frontmatter
-            source_url = frontmatter.get('source')
-            
-            # Generate analysis with source URL
+            # Generate analysis from main content only
             analysis = await self._generate_analysis(main_content, source_url)
             
-            # Reconstruct frontmatter
-            frontmatter['title'] = title
-            frontmatter['analyzed_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            
-            # Format frontmatter section
-            frontmatter_lines = ['---']
-            for key, value in frontmatter.items():
-                frontmatter_lines.append(f'{key}: {value}')
-            frontmatter_lines.append('---\n')
-            
-            # Get content hash and construct screenshot path using forward slashes
+            # Get screenshot path
             content_hash = os.path.splitext(os.path.basename(content_path))[0].split('_')[0]
             screenshot_path = f"/{os.path.dirname(content_path)}/{content_hash}.png"
             
-            # Combine all parts with screenshot (ensure forward slashes in path)
-            markdown_parts = [
-                *frontmatter_lines,
-                f"# {title}",
-                "", # Empty line for spacing
-                f"![Screenshot]({screenshot_path})",
-                "", # Empty line for spacing
-                analysis
-            ]
-            full_content = '\n'.join(markdown_parts)
+            # Build output markdown with debug info
+            content_preview = main_content[:200] + "..." if len(main_content) > 200 else main_content
+            report = f"""# {title}
+
+![Screenshot]({screenshot_path})
+
+{analysis}
+
+---
+Source: {source_url or '[Source URL not available]'}
+Analyzed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Content Length: {len(main_content)} characters
+Content Preview: {content_preview}
+"""
             
-            # Save report in posts directory
+            # Save report
             report_path = os.path.join(self.posts_dir, f"{safe_title}.md")
-            
             with open(report_path, 'w', encoding='utf-8') as f:
-                f.write(full_content)
+                f.write(report)
                 
             logger.info(f"✅ Analysis completed: {report_path}")
             return report_path
@@ -182,13 +244,65 @@ class Lemon8AnalyzerAgent:
 
     async def _generate_analysis(self, content: str, source_url: str = None) -> str:
         """Generate structured analysis of content"""
+        # Debug log the content being analyzed
+        logger.debug("🔍 CONTENT BEING ANALYZED:")
+        logger.debug("-" * 80)
+        logger.debug(content[:500] + "..." if len(content) > 500 else content)
+        logger.debug("-" * 80)
+
         prompt = PromptTemplate(
             input_variables=["content", "source_url"],
-        template="""You are a professional content analyst specializing in location-based reviews and recommendations. Your task is to analyze content and extract valuable insights in a structured, engaging format.
+            template="""=========================================
+INPUT CONTENT:
+=========================================
+{content}
+
+=========================================
+SOURCE URL:
+=========================================
+{source_url}
+
+=========================================
+ANALYSIS INSTRUCTIONS:
+=========================================
+
+You are a professional content analyst specializing in location-based reviews and recommendations. Your task is to analyze content and extract valuable insights in a structured, engaging format.
+
+MANDATORY LOCATION VALIDATION - READ THIS FIRST:
+1. Extract the post title and find any explicit location mention.
+   Examples: "Things to do in LONDON", "TOKYO food guide", "Best cafes in PARIS"
+   
+2. This explicitly mentioned location in the title becomes your PRIMARY LOCATION.
+   - If title says "LONDON", you MUST analyze as a London post
+   - If title says "TOKYO", you MUST analyze as a Tokyo post
+   - NO EXCEPTIONS
+
+3. URL parameters like ?region=sg, usernames, profile locations etc. MUST BE COMPLETELY IGNORED.
+   They have NOTHING to do with the post content location.
+
+4. If you find yourself writing about a location different from what's in the title:
+   - STOP IMMEDIATELY
+   - DELETE everything
+   - Start over focusing on the location from the title
+
+CRITICAL: Re-read the title before starting. Extract the location. Lock that location in your mind.
+
+CRITICAL CONTENT FILTERING:
+1. ONLY analyze content between the post title and any "Related posts" section
+2. COMPLETELY IGNORE:
+   - All URLs and their parameters
+   - Website navigation/UI text
+   - Related posts sections
+   - "You may also like" sections
+   - Comments section
+   - Footer/header content
+   - Social sharing buttons
+   - App store links
+   - Region indicators from UI/URLs
 
 INPUT RULES:
-- FIRST: Extract and validate the primary location/country from the content. All generated content MUST be about this location only.
-- SECOND: Determine the appropriate currency and terminology for the location (e.g., GBP for UK, USD for US, etc.)
+- FIRST: Identify and stick to ONLY the locations from the main post content
+- SECOND: Determine the appropriate currency and terminology for those specific locations
 - Process all content before any "Related posts" section
 - Preserve all tiktokcdn.com image URLs in their original format
 - Extract key metrics (likes, saves, comments, followers) for the overview
@@ -198,12 +312,9 @@ INPUT RULES:
 
 CRITICAL: If you notice your analysis drifting to a different location than what's in the original content, STOP and realign to the correct location. Every recommendation must be backed by the original content.
 
+=========================================
 OUTPUT FORMAT:
-
-# Location Confirmation
-Primary Location: [Country/Region from content]
-Local Currency: [e.g., GBP, USD, EUR]
-Key Local Terms: [List any location-specific terminology used]
+=========================================
 
 # Overview
 [Write a compelling 2-3 sentence summary that captures the essence of the post and its unique value proposition]
@@ -261,13 +372,10 @@ IMPORTANT: Create a detailed section for EACH location/activity listed above. Do
 
 [REQUIRED: Repeat the above detailed section structure for EVERY location/activity mentioned in the content. Each location must have its own complete section with all details.]
 
-Note: If original content mentions more than 5 locations, prioritize the most significant ones with the most detailed information available.
-
 STRUCTURAL REQUIREMENTS:
 1. Every location/activity listed in "Featured Locations/Activities" MUST have its own detailed section
 2. Each section MUST maintain consistent formatting and detail level
 3. DO NOT skip or summarize locations - give each one full treatment
-4. If omitting any locations due to > 5 limit, clearly indicate this
 
 LOCATION VALIDATION:
 Before generating content:
@@ -288,8 +396,18 @@ QUALITY STANDARDS:
         )
         
         try:
-            # Generate analysis
-            formatted_prompt = prompt.format(content=content, source_url=source_url or "[Source URL not available]")
+            # Pass BOTH content and source_url to the template
+            formatted_prompt = prompt.format(
+                content=content,  # Use the content parameter passed to this method
+                source_url=source_url or "[Source URL not available]"
+            )
+            
+            # Debug log the full prompt
+            logger.debug("📝 FULL PROMPT:")
+            logger.debug("-" * 80)
+            logger.debug(formatted_prompt)
+            logger.debug("-" * 80)
+            
             response = self.llm.invoke(formatted_prompt)
             
             if not hasattr(response, 'content'):
@@ -306,22 +424,13 @@ QUALITY STANDARDS:
         try:
             with open(report_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-                
-                # First try to get title from frontmatter
-                if content.startswith('---'):
-                    frontmatter, _ = self._extract_frontmatter(content)
-                    if 'title' in frontmatter:
-                        return frontmatter['title']
-                
-                # Then try first heading
+                # Get first heading
                 lines = content.split('\n')
                 for line in lines:
                     if line.startswith('# '):
                         return line[2:].strip()
-                
-                # Fallback to filename
-                return os.path.basename(report_path).rsplit('_', 2)[0]
+                return os.path.basename(report_path)
                 
         except Exception as e:
             logger.error(f"❌ Failed to get report title: {str(e)}")
-            return os.path.basename(report_path).rsplit('_', 2)[0]
+            return os.path.basename(report_path)
