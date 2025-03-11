@@ -187,14 +187,23 @@ class Lemon8AnalyzerAgent:
         template="""You are a professional content analyst specializing in location-based reviews and recommendations. Your task is to analyze content and extract valuable insights in a structured, engaging format.
 
 INPUT RULES:
+- FIRST: Extract and validate the primary location/country from the content. All generated content MUST be about this location only.
+- SECOND: Determine the appropriate currency and terminology for the location (e.g., GBP for UK, USD for US, etc.)
 - Process all content before any "Related posts" section
 - Preserve all tiktokcdn.com image URLs in their original format
 - Extract key metrics (likes, saves, comments, followers) for the overview
-- Identify primary and secondary locations/activities
-- Note price points, operational hours, and practical details
+- Only describe locations/activities that are explicitly mentioned in the original content
+- Note price points, operational hours, and practical details directly from the content
 - Pay attention to author's personal experiences and recommendations
 
+CRITICAL: If you notice your analysis drifting to a different location than what's in the original content, STOP and realign to the correct location. Every recommendation must be backed by the original content.
+
 OUTPUT FORMAT:
+
+# Location Confirmation
+Primary Location: [Country/Region from content]
+Local Currency: [e.g., GBP, USD, EUR]
+Key Local Terms: [List any location-specific terminology used]
 
 # Overview
 [Write a compelling 2-3 sentence summary that captures the essence of the post and its unique value proposition]
@@ -206,19 +215,21 @@ _Source: {source_url}_
 - **Creator Impact:** [X] Followers • [Brief note on creator's authority in this topic]
 - **Content Quality:** [High/Medium/Low - based on detail level, image quality, usefulness]
 
-### Key Discoveries 🗺
-[Bullet list of 3-5 main locations/activities, each with a one-line value proposition]
+### Featured Locations/Activities 🗺
+[List all locations/activities mentioned in the content, with brief value propositions]
 - [Name]: [What makes it special/worth visiting]
 
 ---
 
-## [Primary Location/Activity Name]
+IMPORTANT: Create a detailed section for EACH location/activity listed above. Do not skip any locations mentioned in the original content.
+
+## [Location/Activity Name 1]
 ![Representative Image](best_quality_image_url)
 
 **Essential Info:**
 - 📍 Location: [Detailed address + Alternative names if applicable]
 - ⏰ Hours: [Operating hours + Best timing recommendations]
-- 💰 Price Range: [Cost breakdown in SGD + Value assessment]
+- 💰 Price Range: [Cost breakdown in appropriate local currency + Value assessment]
 - ⌛ Duration: [Recommended visit length + Peak hours warning if relevant]
 - 🎯 Best For: [Ideal visitor profile/occasion]
 
@@ -248,7 +259,23 @@ _Source: {source_url}_
 
 ---
 
-[Repeat structure for additional locations if present, maintaining consistent formatting]
+[REQUIRED: Repeat the above detailed section structure for EVERY location/activity mentioned in the content. Each location must have its own complete section with all details.]
+
+Note: If original content mentions more than 5 locations, prioritize the most significant ones with the most detailed information available.
+
+STRUCTURAL REQUIREMENTS:
+1. Every location/activity listed in "Featured Locations/Activities" MUST have its own detailed section
+2. Each section MUST maintain consistent formatting and detail level
+3. DO NOT skip or summarize locations - give each one full treatment
+4. If omitting any locations due to > 5 limit, clearly indicate this
+
+LOCATION VALIDATION:
+Before generating content:
+1. Identify the primary country/region from the content
+2. Use appropriate currency for that location
+3. Use local terminology (e.g., "tube" for London underground, "subway" for US metro)
+4. Reference local cultural context and customs
+5. If content seems to drift to a different location, STOP and realign
 
 QUALITY STANDARDS:
 1. Prioritize accuracy and actionable information
