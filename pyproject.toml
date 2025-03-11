@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "lemon8-agent"
+name = "lemon8-travel-research-agent"
 version = "0.1.0"
-description = "Lemon8 research and analysis tool using crawl4ai"
-authors = ["Your Name"]
+description = "A team of agents that scrapes and analyzes authentic user experiences from Lemon8, and generates comprehensive travel guides. Get real recommendations, local insights, and practical travel information based on crowdsourced content."
+authors = ["Jia Wei Ng"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -12,7 +12,7 @@ langchain = "^0.3.20"
 langchain-openai = "^0.3.7"
 markdown = "^3.5.2"
 pillow = "^10.4.0"
-textblob = "^0.18.0"
+crewai = "^0.105.0"
 beautifulsoup4 = "^4.12.3"
 
 [build-system]

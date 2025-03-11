@@ -1,10 +1,10 @@
 # 🌎 Lemon8 Travel Guide Generator
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![crawl4ai](https://img.shields.io/badge/crawl4ai-0.5.0-green.svg)](https://pypi.org/project/crawl4ai/)
+[![crawl4ai](https://img.shields.io/badge/crawl4ai-0.5.0.post4-green.svg)](https://pypi.org/project/crawl4ai/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-An intelligent tool that generates comprehensive travel guides by analyzing authentic user experiences from Lemon8. Get real recommendations, local insights, and practical travel information based on crowdsourced content.
+A team of agents that scrapes and analyzes authentic user experiences from Lemon8, and generates comprehensive travel guides. Get real recommendations, local insights, and practical travel information based on crowdsourced content.
 
 ## ✨ Key Features
 
@@ -54,11 +54,24 @@ An intelligent tool that generates comprehensive travel guides by analyzing auth
 │   │   ├── lemon8_relevance_checker.py  # Travel relevance scoring
 │   │   └── report_aggregator.py      # Travel guide generation
 │   ├── config.py                     # Configuration management
+│   ├── utils/
+│   │   └── logging_config.py         # Logging configuration
 │   └── main.py                       # CLI interface
-├── content/                          # Scraped content
-├── reports/                          # Generated travel guides
-└── requirements.txt                  # Python dependencies
+├── logs/                            # Application logs
+├── output/                          # Generated content & guides
+├── requirements.txt                 # Python dependencies
+└── pyproject.toml                  # Project metadata
 ```
+
+## Key Dependencies
+
+- crawl4ai (0.5.0.post4) - Web crawling and content extraction
+- crewai (0.105.0) - Agent orchestration and coordination
+- langchain (0.3.20) - LLM integration and chaining
+- langchain-openai (0.3.7) - OpenAI model support
+- beautifulsoup4 (4.12.3) - HTML parsing
+- markdown (3.5.2) - Markdown processing
+- pillow (10.4.0) - Image handling
 
 ## 💡 Usage Examples
 
@@ -66,107 +79,125 @@ An intelligent tool that generates comprehensive travel guides by analyzing auth
 
 ```bash
 python src/main.py
-
-# Example queries:
-# - things to do in london
-# - best restaurants in tokyo
-# - hidden gems in paris
-# - local food in bangkok
 ```
 
-### Content Types
+The interactive CLI will guide you through:
 
-The tool supports generating guides focused on specific aspects of travel:
+1. **Travel Query**: Enter what you want to know
 
-1. **Everything** - Comprehensive destination guide
-2. **Food & Dining** - Restaurant and cafe recommendations
-3. **Attractions & Activities** - Sightseeing and things to do
-4. **Accommodation** - Hotels, hostels, and places to stay
-5. **Transport & Getting Around** - Local transportation options
-6. **Local Tips & Culture** - Cultural insights and local advice
+   ```
+   Example queries:
+   - things to do in [city]
+   - best restaurants in [city]
+   - [city] travel guide
+   - hidden gems in [city]
+   - local food in [city]
+   ```
 
-### Example Guide Structure
+2. **Content Type Selection**: Choose your focus
 
-```markdown
-# 🌎 Travel Guide: London
+   ```
+   1. Everything - Comprehensive destination guide
+   2. Food & Dining - Restaurant and cafe recommendations
+   3. Attractions & Activities - Sightseeing and things to do
+   4. Accommodation - Hotels, hostels, and places to stay
+   5. Transport & Getting Around - Local transportation options
+   6. Local Tips & Culture - Cultural insights and local advice
+   ```
 
-## 🎯 Quick Overview
+3. **Source Coverage**: Set minimum number of sources to analyze
 
-Key information about the destination
+   ```
+   Minimum: 5 sources (recommended: 15+)
+   ```
 
-## 📸 Travel Photos
+### Process & Output
 
-Organized by category (food, attractions, etc.)
+1. **Content Discovery**: The tool finds relevant Lemon8 posts based on your query
+2. **Smart Analysis**: Each post is analyzed for:
+   - Relevance to your query (scored 0-1.0)
+   - Content value and authenticity
+   - Practical travel information
+3. **Progress Tracking**: Real-time updates on:
+   - Sources analyzed
+   - Relevant content found
+   - Average relevance scores
+4. **Guide Generation**: Creates a comprehensive Markdown guide with:
+   - Detailed recommendations
+   - Cost information
+   - Transport options
+   - Local tips and insights
+   - Important travel notes
+   - Visual content organization
 
-## 🗺️ Location & Access
+All outputs are saved to the `output/` directory with the following structure:
 
-Area information and getting there
-
-## 💰 Cost Guide
-
-Price ranges and budgeting information
-
-## 🎯 Key Recommendations
-
-Detailed place recommendations with:
-
-- Location details
-- Operating hours
-- Cost information
-- Must-try/see items
-- Practical tips
-
-## 🌟 Experiences & Activities
-
-Activity categories and details
-
-## 🎒 Travel Tips
-
-- Local insights
-- Cultural notes
-- Practical advice
-
-## ⚠️ Important Notes
-
-Warnings and considerations
+```
+output/
+└── [run_id]_[timestamp]/        # e.g. cafes_in_johor_bahru_20250311_000816/
+    ├── metadata/              # Analysis metadata and screenshots
+    │   ├── *.md              # Content analysis files
+    │   └── *.png             # Post screenshots
+    └── posts/                # Processed post content
+        └── *.md              # Individual analyzed posts
 ```
 
-## 💻 Implementation Details
+## 🛠️ Implementation Details
 
-### Travel Content Analysis
+### Agent Architecture
 
-- **Smart Relevance Checking**: Evaluates content based on:
+The system uses CrewAI to orchestrate a team of specialized agents:
 
-  - Geographic relevance
-  - Travel value
-  - Content categories
-  - Practical details
-  - Source authenticity
+1. **Lemon8 Scraper Agent**
 
-- **Comprehensive Analysis**: Extracts:
-  - Location information
-  - Cost data
-  - Operating hours
-  - Transport options
-  - Local tips
-  - Cultural insights
+   - Handles content discovery and extraction
+   - Captures post screenshots and metadata
+   - Preserves image references and social metrics
 
-### Guide Generation
+2. **Relevance Checker Agent**
 
-- Aggregates information from multiple sources
-- Cross-validates recommendations
-- Organizes content by category
-- Provides practical, actionable information
-- Includes authentic photos and visuals
+   - Scores content relevance (0-1.0)
+   - Filters for travel-specific information
+   - Validates source authenticity
 
-## 🔍 Supported Regions
+3. **Content Analyzer Agent**
 
-- 🇸🇬 Singapore
-- 🇲🇾 Malaysia
-- 🇮🇩 Indonesia
-- 🇹🇭 Thailand
-- 🇻🇳 Vietnam
-- 🇵🇭 Philippines
+   - Extracts structured information
+   - Processes using LangChain + OpenAI
+   - Maintains original context and citations
+
+4. **Report Aggregator Agent**
+   - Combines multiple sources
+   - Cross-validates information
+   - Generates cohesive travel guides
+
+### Analysis Pipeline
+
+1. **Initial Processing**:
+
+   - YAML frontmatter extraction
+   - Image path normalization
+   - Metadata preservation
+
+2. **Content Analysis**:
+
+   - Overview generation
+   - Place/activity breakdown
+   - Social metrics tracking
+   - Screenshot integration
+
+3. **Guide Compilation**:
+   - Multi-source aggregation
+   - Category organization
+   - Local insights integration
+   - Visual content mapping
+
+### Model Configuration
+
+- Uses OpenAI GPT models via LangChain
+- Temperature: 0.7 (balanced creativity/accuracy)
+- Includes structured prompts for consistent output
+- Preserves original URLs and citations
 
 ## 🤝 Contributing
 
@@ -176,7 +207,6 @@ Contributions are welcome! Feel free to:
 - Open pull requests with improvements
 - Suggest new travel-related features
 - Help improve guide generation
-- Add support for new regions
 
 ## 📝 License
 

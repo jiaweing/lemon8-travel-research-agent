@@ -4,5 +4,5 @@ langchain==0.3.20
 langchain-openai==0.3.7
 markdown==3.5.2
 pillow==10.4.0
-crewai==0.19.0
+crewai==0.105.0
 beautifulsoup4==4.12.3

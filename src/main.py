@@ -7,7 +7,6 @@ Extracts and aggregates real user experiences, recommendations, and local insigh
 Example:
     python src/main.py
     > Enter travel query: things to do in london
-    > Select region: 1 (Singapore)
     > Generating travel guide...
 """
 
@@ -39,16 +38,6 @@ class Lemon8TravelCLI:
     Provides an interactive way to get authentic travel recommendations by analyzing
     real user experiences and reviews from Lemon8 posts.
     """
-    
-    # Available regions with emoji flags
-    REGIONS = {
-        "1": ("sg", "🇸🇬 Singapore"),
-        "2": ("my", "🇲🇾 Malaysia"),
-        "3": ("id", "🇮🇩 Indonesia"),
-        "4": ("th", "🇹🇭 Thailand"),
-        "5": ("vn", "🇻🇳 Vietnam"),
-        "6": ("ph", "🇵🇭 Philippines")
-    }
     
     # Travel content categories
     CONTENT_TYPES = {
@@ -84,16 +73,6 @@ class Lemon8TravelCLI:
         
         self.scraper = Lemon8ScraperAgent(run_id=self.run_id)
         self.analyzer = Lemon8AnalyzerAgent(run_id=self.run_id)
-
-    def _select_region(self) -> str:
-        """Get user's preferred region for content."""
-        print("\n📍 Select region for local content:")
-        for key, (code, name) in self.REGIONS.items():
-            print(f"{key}. {name}")
-        
-        choice = input("\nEnter number (1-6) or press Enter for Singapore: ").strip()
-        region = self.REGIONS.get(choice, self.REGIONS["1"])[0]
-        return region
 
     def _select_content_type(self) -> Dict[str, str]:
         """Get user's preferred type of travel content."""
@@ -204,9 +183,6 @@ class Lemon8TravelCLI:
             except ValueError:
                 print("⚠️ Using default: 15 sources")
                 num_posts = 15
-
-            # Get region preference
-            region = self._select_region()
             
             # Initialize agents with query-specific run ID
             self._init_agents(query)
@@ -218,7 +194,7 @@ class Lemon8TravelCLI:
             print(f"📂 Output directory: {self.output_dir}")
             
             # Find relevant posts
-            posts = await self.scraper.scrape_search_results(query, region, max_posts=num_posts * 2)
+            posts = await self.scraper.scrape_search_results(query, max_posts=num_posts)
             if not posts:
                 print("❌ No relevant content found")
                 return

@@ -8,21 +8,21 @@ Example usage:
     scraper = Lemon8ScraperAgent()
     
     # Find posts from search
-    posts = await scraper.scrape_search_results("photography")
+    posts = await scraper.scrape_search_results("best cafes in singapore")
     
     # Scrape individual post
     result = await scraper.scrape_post("https://www.lemon8-app.com/@user/123")
 """
 
-from typing import List, Dict, Optional
-from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode, BrowserConfig
 import os
 import hashlib
 import base64
 from datetime import datetime
-from PIL import Image
+from typing import List, Dict, Optional
 from urllib.parse import quote, urljoin
+from PIL import Image
 from bs4 import BeautifulSoup
+from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode, BrowserConfig
 from src.utils.logging_config import setup_logging, get_logger
 from config import Config
 
@@ -38,7 +38,7 @@ class Lemon8ScraperAgent:
     Saves markdown content and 16:9 screenshots of posts to disk.
     
     Attributes:
-        content_dir (str): Directory where scraped content is saved
+        metadata_dir (str): Directory where scraped content is saved
         crawler (AsyncWebCrawler): Configured crawl4ai instance for web scraping
     """
     def _load_post_content(self, url: str) -> Optional[Dict[str, str]]:
@@ -57,8 +57,8 @@ class Lemon8ScraperAgent:
             return None
             
         post_hash = hashlib.sha256(url.encode('utf-8')).hexdigest()[:16]
-        content_path = os.path.join(self.content_dir, f"{post_hash}.md")
-        screenshot_path = os.path.join(self.content_dir, f"{post_hash}.png")
+        content_path = f"{self.metadata_dir}/{post_hash}.md"
+        screenshot_path = f"{self.metadata_dir}/{post_hash}.png"
         
         if os.path.exists(content_path):
             logger.debug(f"📄 Found cached content for {url}")
@@ -79,9 +79,11 @@ class Lemon8ScraperAgent:
                                   If None, generates based on datetime.
         """
         self.run_id = run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.output_dir = os.path.join("output", self.run_id)
-        self.content_dir = os.path.join(self.output_dir, "metadata")
+        # Use forward slashes for paths
+        self.output_dir = f"{Config.OUTPUT_DIR}/{self.run_id}"
+        self.metadata_dir = f"{self.output_dir}/metadata"
         self.seen_urls = set()  # Track URLs we've already processed
+        
         browser_config = BrowserConfig(
             headless=Config.HEADLESS,
             viewport_width=1920,
@@ -111,9 +113,10 @@ class Lemon8ScraperAgent:
             timeout=Config.TIMEOUT,
             use_stealth_js=True
         )
+        
         # Create output directories
         os.makedirs(self.output_dir, exist_ok=True)
-        os.makedirs(self.content_dir, exist_ok=True)
+        os.makedirs(self.metadata_dir, exist_ok=True)
         logger.info("🤖 Initialized Lemon8ScraperAgent")
 
     def _extract_posts_from_html(self, html: str, is_post_page: bool = False) -> List[str]:
@@ -149,7 +152,7 @@ class Lemon8ScraperAgent:
             # 4. Aren't profile or search pages
             # Parse URL path to extract parts
             path_parts = url.split('lemon8-app.com/')[-1].split('/')
-            # A valid post URL should have format: @username/postid?region=xx
+            # A valid post URL should have format: @username/postid[?region=xx]
             if (
                 url and 
                 (url.startswith('http://') or url.startswith('https://')) and
@@ -168,7 +171,7 @@ class Lemon8ScraperAgent:
                         
         return list(set(posts))  # Remove duplicates
 
-    async def scrape_search_results(self, query: str, region: str = "sg", max_posts: int = 5) -> List[str]:
+    async def scrape_search_results(self, query: str, max_posts: int = 5) -> List[str]:
         """
         Scrape Lemon8 search results for a given query.
         
@@ -176,8 +179,7 @@ class Lemon8ScraperAgent:
         
         Args:
             query (str): Search query to find posts for
-            region (str, optional): Region code for localized results. 
-                                  Defaults to "sg" (Singapore).
+            max_posts (int): Maximum number of posts to return
             
         Returns:
             List[str]: List of post URLs found in search results.
@@ -188,13 +190,13 @@ class Lemon8ScraperAgent:
             >>> print(f"Found {len(posts)} posts")
         """
         encoded_query = quote(query)
-        url = f"https://www.lemon8-app.com/discover/{encoded_query}?region={region}&pid=website_seo_from_sug"
+        url = f"https://www.lemon8-app.com/discover/{encoded_query}?pid=website_seo_from_sug"
         logger.info(f"🔎 Starting content scraping for query: {query}")
 
         async with self.crawler as crawler:
             try:
                 # Log start of scraping
-                logger.info(f"🔍 Searching for {max_posts} posts matching '{query}' in {region}")
+                logger.info(f"🔍 Searching for {max_posts} posts matching '{query}'")
                 
                 config = CrawlerRunConfig(
                     screenshot=False,
@@ -379,14 +381,14 @@ class Lemon8ScraperAgent:
                                     document.querySelectorAll('a').forEach(a => {{
                                         const href = a.href || '';
                                         // Check URL pattern: /@username/numbers
-                                        if (href.includes('/@') && /\/@[^\/]+\/\d{{5,}}/.test(href)) {{
+                                        if (href.includes('/@') && RegExp('@[^/]+/[0-9]{5,}').test(href)) {{
                                             postLinks.add(href);
                                         }}
                                         // Also check data attributes that might contain the URL
                                         for (const attr of a.attributes) {{
                                             if (attr.name.startsWith('data-') && 
                                                 attr.value.includes('/@') && 
-                                                /\/@[^\/]+\/\d{{5,}}/.test(attr.value)) {{
+                                                RegExp('@[^/]+/[0-9]{5,}').test(attr.value)) {{
                                                 postLinks.add(attr.value);
                                             }}
                                         }}
@@ -590,12 +592,12 @@ class Lemon8ScraperAgent:
                 
                 # Generate unique filename using first 16 chars of URL hash
                 post_hash = hashlib.sha256(post_url.encode('utf-8')).hexdigest()[:16]
-                content_path = os.path.join(self.content_dir, f"{post_hash}.md")
+                content_path = f"{self.metadata_dir}/{post_hash}.md"
                 
                 # Process and save screenshot if available
                 screenshot_path = None
                 if result.screenshot:
-                    screenshot_path = os.path.join(self.content_dir, f"{post_hash}.png")
+                    screenshot_path = f"{self.metadata_dir}/{post_hash}.png"
                     screenshot_bytes = (
                         base64.b64decode(result.screenshot) 
                         if isinstance(result.screenshot, str)
@@ -603,7 +605,7 @@ class Lemon8ScraperAgent:
                     )
                     
                     # Save original screenshot temporarily
-                    temp_path = os.path.join(self.content_dir, f"{post_hash}_temp.png")
+                    temp_path = f"{self.metadata_dir}/{post_hash}_temp.png"
                     with open(temp_path, 'wb') as f:
                         f.write(screenshot_bytes)
                     
@@ -656,14 +658,16 @@ class Lemon8ScraperAgent:
                     if page_title:
                         metadata.append(f"title: {page_title}")
                     if screenshot_path:
-                        relative_screenshot_path = os.path.relpath(screenshot_path, self.content_dir)
+                        # Ensure forward slashes in relative paths
+                        relative_screenshot_path = os.path.relpath(screenshot_path, self.metadata_dir).replace('\\', '/')
                         metadata.append(f"screenshot: {relative_screenshot_path}")
                     metadata.append("---\n\n")
 
                     # Start content with screenshot and page title
                     content_start = []
                     if screenshot_path:
-                        relative_screenshot_path = os.path.relpath(screenshot_path, self.content_dir)
+                        # Ensure forward slashes in relative paths
+                        relative_screenshot_path = os.path.relpath(screenshot_path, self.metadata_dir).replace('\\', '/')
                         content_start.append(f"![Post Screenshot]({relative_screenshot_path})")
                     if page_title:
                         content_start.append(f"# {page_title}")

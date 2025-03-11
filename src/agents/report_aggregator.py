@@ -1,4 +1,4 @@
-from typing import List, Dict, Set
+from typing import List, Dict
 import os
 from datetime import datetime
 from crewai import Agent
@@ -30,65 +30,122 @@ class ReportAggregatorAgent:
         )
         self.llm = self._init_llm()
         
-        # Initialize the batch prompt template
-        self.batch_prompt = PromptTemplate(
-            input_variables=["reports", "query", "current_data"],
-            template="""Analyze these reports about {query} and integrate new information.
+        # Initialize the prompt template for iterative refinement
+        self.refine_prompt = PromptTemplate(
+            input_variables=["current_report", "new_reports", "query"],
+            template="""You are an expert content curator specializing in synthesizing location-based reviews into comprehensive, trustworthy guides. Analyze and combine information from multiple reviews about {query}.
 
-CURRENT STATUS:
-{current_data}
+SYNTHESIS APPROACH:
+1. Cross-validate information across reviews
+2. Weight recent reviews more heavily
+3. Identify patterns in experiences and recommendations
+4. Aggregate pricing data with dates for accuracy
+5. Consolidate practical tips and warnings
+6. Preserve unique insights while focusing on consensus
+
+CURRENT REPORT:
+{current_report}
 
 NEW REPORTS TO ANALYZE:
-{reports}
+{new_reports}
 
-PROVIDE UPDATES IN THIS FORMAT:
+OUTPUT FORMAT:
 
-## 🏷️ Place Updates
-### [Place Name]
-![Representative Image](image_path) (if available from reports)
-Total Mentions: [X]
-Rating: [Y]/5.0
+# {query} - Curated Guide
+[2-3 sentence overview of the area/category, highlighting key trends and patterns discovered across reviews]
 
-Key Features:
-- [Feature 1]
-- [Feature 2]
+## Quick Stats 📊
+- **Total Places Reviewed:** [Number]
+- **Review Period:** [Earliest] to [Latest]
+- **Aggregate Reviews:** [Total number of unique reviews analyzed]
+- **Price Range:** [Min]-[Max] SGD across all venues
+- **Most Reviewed Areas:** [List top 3 neighborhoods/districts]
 
-Visual Highlights:
-- Image 1: [Description] (image_path)
-- Image 2: [Description] (image_path)
+## Top Recommendations 🏆
+[List of top 3-5 most consistently praised places, sorted by review frequency and rating]
+1. [Name] - [One-line value proposition] - [X/Y reviews recommend]
+2. [Continue format]
 
-Sources: [list]
+---
 
-## 💰 Cost Information
-### [Category]
-- [Item/Service]: [Price Range] ([X] mentions)
-_Verified prices from [month/year]_
+## [Location Name]
+![Best Available Image](highest_quality_image_url)
 
-## 🚇 Location & Access
-### [Area/Route]
-New Options:
-- [Option] ([X] recommends)
-Tips:
-- [Tip] ([Y] confirms)
+### Consensus Analysis 📈
+- **Overall Rating:** [X.X/5.0] (Weighted average from [Y] reviews)
+- **Recommendation Rate:** [X] out of [Y] reviewers recommend
+- **Price Consistency:** [High/Medium/Low] (noting price variations)
+- **Experience Rating:** [% positive experiences]
+- **Reviewer Agreement:** [Strong/Moderate/Mixed] on key aspects
 
-## 💡 Tips & Recommendations
-### [Category]
-- [Tip] ([X] people)
-Consensus: [High/Medium/Low]
+**Review Sources:** [List all Lemon8 URLs chronologically with dates]
 
-## ⚠️ Important Updates
-Priority: [High/Medium/Low]
-- [Warning]
-Impact: [Description]
-Duration: [If temporary]
+### Validated Information ✓
+- 📍 **Location:** [Cross-referenced address & landmarks]
+- ⏰ **Hours:** [Confirmed operating hours + Notable variations]
+- 💰 **Current Pricing:** [Price range with recent dates]
+  - [Specific menu items/services with consistent pricing]
+  - [Note any price trends or variations]
+- ⌛ **Visit Planning:** [Consolidated timing recommendations]
+  - Peak Hours: [Consensus on busy times]
+  - Recommended Duration: [Average from reports]
 
-## 📊 Statistics
-Areas: [area] (+[X] mentions)
-Highlights: [item] (+[Y] mentions)
-Patterns: [observation]
-Popular Times: [timing trend]
+### Key Highlights ✨
+[3-4 most consistently mentioned positive aspects]
+- [Feature]: [Number of mentions] - [Synthesized description]
+![Supporting Image](relevant_image_url)
+[Additional validated highlights with evidence]
 
-Include source counts and cross-validate information."""
+### Visitor Experience 🎭
+- **Atmosphere:** [Consensus description with any notable variations]
+- **Service Quality:** [Pattern in service experiences]
+- **Crowd Profile:** [Typical visitor demographics/timing]
+- **Accessibility:** [Validated transport/parking info]
+
+### Essential Tips 💡
+[Consistently mentioned advice across reviews]
+- 🎯 Best Times: [Synthesized from multiple experiences]
+- 🎯 Reservations: [Combined booking guidance]
+- 🎯 Must-Try Items: [Most recommended items across reviews]
+- 🎯 Value Tips: [Aggregated money-saving advice]
+
+### Watch Out For ⚠️
+[Common challenges or concerns mentioned across reviews]
+- [Issue 1]: [Frequency of mention] - [Consolidated advice]
+[Continue for significant issues]
+
+### Photo Evidence 📸
+[Include 2-3 best images that validate key points]
+![Detail Image](detail_image_url)
+[Caption explaining significance and source]
+
+---
+
+QUALITY CONTROL CHECKLIST:
+1. Information Currency
+   - Prioritize recent reviews
+   - Note dates for price/operational info
+   - Flag outdated information
+
+2. Validation Standards
+   - Include only multi-source verified facts
+   - Note significant discrepancies
+   - Indicate confidence levels
+
+3. Bias Prevention
+   - Balance positive and critical reviews
+   - Note sponsored/promotional content
+   - Consider reviewer expertise
+
+4. Visual Documentation
+   - Use recent, relevant images
+   - Preserve image quality
+   - Caption with context
+
+5. Practical Value
+   - Focus on actionable information
+   - Include specific prices and times
+   - Provide clear recommendations"""
         )
 
     def _init_llm(self) -> ChatOpenAI:
@@ -134,335 +191,25 @@ Include source counts and cross-validate information."""
             logger.error(f"❌ Failed to load reports: {str(e)}")
             raise
 
-    def _parse_photos(self, section: str) -> List[tuple]:
-        """Parse photo section into structured data"""
-        photos = []
-        current_photo = {}
-        
-        for line in section.split('\n'):
-            if line.startswith('!['):
-                description = line[2:line.index(']')]
-                url = line[line.index('(')+1:line.index(')')]
-                current_photo = {'description': description, 'url': url}
-            elif line.startswith('Type:'):
-                current_photo['type'] = line.split(':', 1)[1].strip()
-            elif line.startswith('Quality:'):
-                current_photo['quality'] = int(line.split(':', 1)[1].strip().split('/')[0])
-            elif line.startswith('_Source:'):
-                current_photo['source'] = line[8:-1].strip()
-                if all(k in current_photo for k in ['description', 'url', 'type', 'quality', 'source']):
-                    photos.append((
-                        current_photo['description'],
-                        current_photo['url'],
-                        current_photo['source'],
-                        current_photo['type'],
-                        current_photo['quality']
-                    ))
-                current_photo = {}
-                
-        return photos
-
-    def _parse_markdown_sections(self, content: str) -> Dict[str, str]:
-        """Parse markdown content into sections"""
-        sections = {}
-        current_section = None
-        current_content = []
-        
-        for line in content.split('\n'):
-            if line.startswith('## '):
-                if current_section:
-                    sections[current_section] = '\n'.join(current_content)
-                current_section = line[3:].strip()
-                current_content = []
-            elif current_section:
-                current_content.append(line)
-                
-        if current_section:
-            sections[current_section] = '\n'.join(current_content)
-            
-        return sections
-
-    def _merge_place_details(self, existing: Dict, new: Dict) -> None:
-        """Merge new place details with existing data"""
-        existing['mentions'] += new['mentions']
-        existing['ratings'].extend(new['ratings'])
-        existing['features'].update(new['features'])
-        existing['sources'].extend(s for s in new['sources'] if s not in existing['sources'])
-
-    def _parse_places(self, section: str) -> Dict[str, Dict]:
-        """Parse places section into structured data"""
-        places = {}
-        current_place = None
-        current_data = {}
-        
-        for line in section.split('\n'):
-            if line.startswith('### '):
-                if current_place and current_data:
-                    places[current_place] = current_data
-                current_place = line[4:].strip()
-                current_data = {
-                    'mentions': 0,
-                    'ratings': [],
-                    'features': set(),
-                    'sources': [],
-                    'images': []  # Add images to store
-                }
-            elif current_place:
-                if 'Total Mentions:' in line:
-                    current_data['mentions'] = int(line.split(':')[1].strip())
-                elif 'Rating:' in line:
-                    rating = float(line.split(':')[1].split('/')[0].strip())
-                    current_data['ratings'].append(rating)
-                elif line.strip().startswith('- ') and 'Sources:' not in line:
-                    current_data['features'].add(line.strip()[2:])
-                elif 'Sources:' in line:
-                    current_data['sources'].extend([s.strip() for s in line.split(':')[1].strip().split(',')])
-                    
-        if current_place and current_data:
-            places[current_place] = current_data
-            
-        return places
-
-    def _format_place_section(self, name: str, details: Dict) -> str:
-        """Format a place section with details and stats"""
-        rating = sum(details["ratings"])/len(details["ratings"]) if details["ratings"] else None
-        sections = [
-            f"\n### {name}",
-            f"Recommended by {details['mentions']} people",
-            f"Rating: {'%.1f/5.0' % rating if rating else 'No ratings'}"
-        ]
-        
-        if details["features"]:
-            sections.extend([
-                "\nHighlights:",
-                *[f"- {feature}" for feature in details["features"]]
-            ])
-            
-        if len(details["sources"]) > 0:
-            sections.append(f"\n_Verified by {len(details['sources'])} sources_")
-            
-        return "\n".join(sections)
-
-    def _format_photo(self, photo: tuple) -> str:
-        """Format a photo with metadata"""
-        description, url, source, type_, quality = photo
-        return f"\n### {type_}\n![{description}]({url})\n_Source: {source}_"
-
-    def _format_cost_section(self, category: str, items: List) -> str:
-        """Format a cost section with price ranges"""
-        sections = [
-            f"\n### {category}",
-            *[f"- {item}: {price_range} ({mentions} mentions)"
-              for item, price_range, _, mentions in items]
-        ]
-        return "\n".join(sections)
-
-    def _format_transport(self, area: str, details: Dict) -> str:
-        """Format transport information for an area"""
-        sections = [
-            f"\n### {area}",
-            "\nOptions:",
-            *[f"- {option}" for option, _ in sorted(details['options'], 
-                                                  key=lambda x: x[1], 
-                                                  reverse=True)],
-            "\nTips:",
-            *[f"- {tip}" for tip, _ in sorted(details['tips'], 
-                                             key=lambda x: x[1], 
-                                             reverse=True)],
-            f"\n_Information from {len(details['sources'])} sources_"
-        ]
-        return "\n".join(sections)
-
-    def _format_tips_section(self, category: str, tips_list: List) -> str:
-        """Format tips with consensus information"""
-        sections = [
-            f"\n### {category}",
-            *[f"- {tip} ({sources} people mention this) - {consensus} consensus"
-              for tip, sources, consensus in sorted(tips_list, 
-                                                  key=lambda x: x[1], 
-                                                  reverse=True)]
-        ]
-        return "\n".join(sections)
-
-    def _format_warning(self, warning: tuple) -> str:
-        """Format warning with priority and impact"""
-        text, impact, sources, priority = warning
-        priority_emoji = "🚨" if priority == "High" else "⚠️"
-        return f"\n### {priority_emoji} {text}\n{impact}\n_Reported by {len(sources)} sources_"
-
-    def _format_top_mentions(self, places: Dict, count: int) -> str:
-        """Format top mentioned places summary"""
-        top = sorted(
-            [(name, details["mentions"]) for name, details in places.items()],
-            key=lambda x: x[1],
-            reverse=True
-        )[:count]
-        return "\n".join(f"- {name}: {mentions} mentions" for name, mentions in top)
-
-    def _format_recent_stats(self, stats: Dict) -> str:
-        """Format recent statistics summary"""
-        sections = []
-        if stats["areas"]:
-            sections.append("Popular Areas: " + 
-                          ", ".join(f"{area} ({count})" for area, count 
-                                  in sorted(stats["areas"].items(), 
-                                          key=lambda x: x[1], 
-                                          reverse=True)[:3]))
-        if stats["activities"]:
-            sections.append("Top Activities: " + 
-                          ", ".join(f"{act} ({count})" for act, count 
-                                  in sorted(stats["activities"].items(), 
-                                          key=lambda x: x[1], 
-                                          reverse=True)[:3]))
-        return "\n".join(sections)
-
-    async def _analyze_batch(self, query: str, current_data: str, batch_content: str) -> str:
-        """Analyze a batch of reports and return structured updates"""
+    async def _refine_report(self, query: str, current_report: str, batch_content: str) -> str:
+        """Use LLM to iteratively refine the report with new information"""
         try:
-            # Format and send prompt
-            formatted_prompt = self.batch_prompt.format(
+            formatted_prompt = self.refine_prompt.format(
                 query=query,
-                current_data=current_data,
-                reports=batch_content
+                current_report=current_report,
+                new_reports=batch_content
             )
             
             response = self.llm.invoke(formatted_prompt)
             if not hasattr(response, 'content'):
-                logger.error("❌ Batch analysis failed")
-                return None
+                logger.error("❌ Report refinement failed")
+                return current_report
                 
             return response.content
             
         except Exception as e:
-            logger.error(f"❌ Batch analysis failed: {str(e)}")
-            return None
-
-    def _update_data(self, sections: Dict[str, str], photos: List, 
-                    places: Dict, costs: Dict, transport: Dict, 
-                    tips: Dict, warnings: List, stats: Dict) -> None:
-        """Update aggregated data with new information from batch analysis"""
-        # Update photos
-        if "📸 New Photos" in sections:
-            new_photos = self._parse_photos(sections["📸 New Photos"])
-            for photo in new_photos:
-                if photo not in photos:
-                    photos.append(photo)
-        
-        # Update places
-        if "🏷️ Place Updates" in sections:
-            new_places = self._parse_places(sections["🏷️ Place Updates"])
-            for name, details in new_places.items():
-                if name not in places:
-                    places[name] = details
-                else:
-                    self._merge_place_details(places[name], details)
-        
-        # Update costs
-        if "💰 Cost Information" in sections:
-            for line in sections["💰 Cost Information"].split('\n'):
-                if line.startswith('### '):
-                    current_category = line[4:].strip()
-                    costs.setdefault(current_category, [])
-                elif line.strip().startswith('- '):
-                    try:
-                        item_info = line[2:].strip()
-                        item, rest = item_info.split(':', 1)
-                        price_range = rest[:rest.rfind('(')].strip()
-                        mentions = int(rest[rest.rfind('(')+1:rest.rfind(')')].split()[0])
-                        costs[current_category].append((
-                            item.strip(),
-                            price_range,
-                            datetime.now().strftime('%Y-%m'),
-                            mentions
-                        ))
-                    except Exception as e:
-                        logger.warning(f"Failed to parse cost line: {line} - {str(e)}")
-        
-        # Update transport
-        if "🚇 Location & Access" in sections:
-            current_area = None
-            for line in sections["🚇 Location & Access"].split('\n'):
-                if line.startswith('### '):
-                    current_area = line[4:].strip()
-                    transport.setdefault(current_area, {
-                        'options': [],
-                        'tips': [],
-                        'sources': set()
-                    })
-                elif line.strip().startswith('- '):
-                    item = line[2:line.rfind('(')].strip()
-                    mentions = int(line[line.rfind('(')+1:line.rfind(')')].split()[0])
-                    if 'New Options:' in sections["🚇 Location & Access"].split(line)[0]:
-                        transport[current_area]['options'].append((item, mentions))
-                    elif 'Tips:' in sections["🚇 Location & Access"].split(line)[0]:
-                        transport[current_area]['tips'].append((item, mentions))
-        
-        # Update tips
-        if "💡 Tips & Recommendations" in sections:
-            current_category = None
-            for line in sections["💡 Tips & Recommendations"].split('\n'):
-                if line.startswith('### '):
-                    current_category = line[4:].strip()
-                    tips.setdefault(current_category, [])
-                elif line.strip().startswith('- '):
-                    try:
-                        tip = line[2:line.rfind('(')].strip()
-                        mentions = int(line[line.rfind('(')+1:line.rfind(')')].split()[0])
-                        consensus = line[line.rfind('Consensus:')+10:].strip()
-                        
-                        existing_tip = next((t for t, s, c in tips[current_category] if t == tip), None)
-                        if existing_tip:
-                            idx = next(i for i, (t, s, c) in enumerate(tips[current_category]) if t == tip)
-                            _, sources, _ = tips[current_category][idx]
-                            tips[current_category][idx] = (tip, sources + mentions, consensus)
-                        else:
-                            tips[current_category].append((tip, mentions, consensus))
-                    except Exception as e:
-                        logger.warning(f"Failed to parse tip line: {line} - {str(e)}")
-        
-        # Update warnings
-        if "⚠️ Important Updates" in sections:
-            current_warning = None
-            current_priority = None
-            current_impact = None
-            
-            for line in sections["⚠️ Important Updates"].split('\n'):
-                if line.startswith('Priority:'):
-                    current_priority = line.split(':', 1)[1].strip()
-                elif line.strip().startswith('- '):
-                    current_warning = line[2:].strip()
-                elif line.startswith('Impact:'):
-                    current_impact = line.split(':', 1)[1].strip()
-                    if current_warning and current_priority and current_impact:
-                        if not any(w[0] == current_warning for w in warnings):
-                            warnings.append((
-                                current_warning,
-                                current_impact,
-                                set([datetime.now().strftime('%Y-%m')]),
-                                current_priority
-                            ))
-                        current_warning = current_impact = None
-        
-        # Update statistics
-        if "📊 Statistics" in sections:
-            for line in sections["📊 Statistics"].split('\n'):
-                try:
-                    if line.startswith('Areas:'):
-                        area, mentions = line.split(':', 1)[1].strip().split('(+')
-                        mentions = int(mentions.rstrip(')'))
-                        stats["areas"][area.strip()] = stats["areas"].get(area.strip(), 0) + mentions
-                    elif line.startswith('Highlights:'):
-                        activity, mentions = line.split(':', 1)[1].strip().split('(+')
-                        mentions = int(mentions.rstrip(')'))
-                        stats["activities"][activity.strip()] = stats["activities"].get(activity.strip(), 0) + mentions
-                    elif line.startswith('Patterns:'):
-                        pattern = line.split(':', 1)[1].strip()
-                        stats["budget_patterns"][pattern] = stats["budget_patterns"].get(pattern, 0) + 1
-                    elif line.startswith('Popular Times:'):
-                        timing = line.split(':', 1)[1].strip()
-                        stats["timing"][timing] = stats["timing"].get(timing, 0) + 1
-                except Exception as e:
-                    logger.warning(f"Failed to parse statistics line: {line} - {str(e)}")
+            logger.error(f"❌ Report refinement failed: {str(e)}")
+            return current_report
 
     async def generate_final_report(self, query: str) -> str:
         """Generate a final consolidated report for the query"""
@@ -471,20 +218,6 @@ Include source counts and cross-validate information."""
         # Load reports in batches
         report_batches = self._load_reports()
         
-        # Initialize aggregated data structures
-        photos = []  # [(description, url, source, type, quality)]
-        places = {}  # name -> {mentions, ratings, features, sources}
-        costs = {}   # category -> [(item, range, sources, mentions)]
-        transport = {}  # area -> {options: [], tips: [], sources}
-        tips = {}    # category -> [(tip, sources, consensus)]
-        warnings = []  # [(text, impact, sources, priority)]
-        stats = {
-            "areas": {},
-            "activities": {},
-            "budget_patterns": {},
-            "timing": {},
-        }
-        
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         # Sanitize query for filename
         safe_query = "".join(c if c.isalnum() or c in " -_" else "_" for c in query)
@@ -492,79 +225,28 @@ Include source counts and cross-validate information."""
         final_report_path = os.path.join(self.output_dir, f"{safe_query}.md")
         
         try:
-            # Process each batch
+            # Start with a structured report template
+            current_report = f"""# {query}
+
+A guide to help you explore the best cafes and restaurants.
+
+"""
+            
+            # Process each batch and iteratively improve the report
             for i, batch in enumerate(report_batches, 1):
                 logger.info(f"🔄 Processing batch {i} of {len(report_batches)}")
-                
-                current_data = f"""
-Current Progress:
-- {len(photos)} photos collected
-- {len(places)} places documented
-- {len(costs)} price categories
-- {len(transport)} areas with access info
-- {len(tips)} recommendations
-- {len(warnings)} important notes
-
-Most Mentioned:
-{self._format_top_mentions(places, 3)}
-
-Recent Updates:
-{self._format_recent_stats(stats)}"""
                 
                 batch_content = "\n\n---\n\n".join(
                     f"Report {j+1}:\n{report['content']}"
                     for j, report in enumerate(batch)
                 )
                 
-                response = await self._analyze_batch(query, current_data, batch_content)
-                if not response:
-                    continue
-                    
-                sections = self._parse_markdown_sections(response)
-                self._update_data(sections, photos, places, costs, transport, tips, warnings, stats)
-            
-            # Generate final report
-            report_sections = [
-                f"# {query}",  # Use original query as title
-                "\n## 📍 Overview",
-                f"Based on {sum(len(batch) for batch in report_batches)} verified sources",
-                
-                "\n## ⭐ Top Highlights",
-                *[self._format_place_section(name, details) 
-                  for name, details in sorted(
-                      places.items(),
-                      key=lambda x: (x[1]["mentions"], 
-                                   sum(x[1]["ratings"])/len(x[1]["ratings"]) if x[1]["ratings"] else 0),
-                      reverse=True
-                  )[:10]],
-                
-                "\n## 📸 Photos",
-                *[self._format_photo((desc, url, src, type_, qual)) 
-                  for desc, url, src, type_, qual in sorted(photos, key=lambda x: x[4], reverse=True)[:15]],
-                
-                "\n## 💰 Costs",
-                *[self._format_cost_section(category, items) 
-                  for category, items in sorted(costs.items())],
-                
-                "\n## 🚇 Getting There & Around",
-                *[self._format_transport(area, details) 
-                  for area, details in sorted(transport.items())],
-                
-                "\n## 💡 Tips & Recommendations",
-                *[self._format_tips_section(category, tip_list) 
-                  for category, tip_list in sorted(tips.items())],
-                
-                "\n## ⚠️ Important Notes",
-                *[self._format_warning(w) for w in sorted(warnings, key=lambda x: x[3], reverse=True)],
-                
-                f"\n## 📅 Last Updated",
-                f"_{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_",
-                f"\nBased on {sum(len(batch) for batch in report_batches)} verified sources"
-            ]
+                # Refine the report with new information
+                current_report = await self._refine_report(query, current_report, batch_content)
             
             # Save final report
             with open(final_report_path, "w", encoding="utf-8") as f:
-                f.write("\n".join(report_sections))
+                f.write(current_report)
             
             logger.info(f"✅ Report completed at {final_report_path}")
             return final_report_path
