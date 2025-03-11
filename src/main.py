@@ -101,7 +101,11 @@ class Lemon8TravelCLI:
         # Combine original query with content type keywords if specific type selected
         enhanced_query = f"{query} {content_type['keywords']}" if content_type['keywords'] else query
         
-        while to_scrape and relevant_count < min_posts:
+        max_attempts = min_posts * 3  # Try up to 3x the requested number of posts
+        attempt_count = 0
+        
+        while to_scrape and relevant_count < min_posts and attempt_count < max_attempts:
+            attempt_count += 1
             post_url = to_scrape.pop(0)
             print(f"\n📥 Analyzing post: {post_url}")
             

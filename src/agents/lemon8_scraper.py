@@ -429,10 +429,13 @@ class Lemon8ScraperAgent:
                 
                 post_count = len(post_urls)
                 logger.info(f"✅ Found {post_count} posts for query: {query}")
-                if post_count < max_posts:
-                    logger.warning(f"⚠️ Only found {post_count} posts, requested {max_posts}")
-                # Return only the requested number of posts
-                return post_urls[:max_posts]
+                
+                # Get double the requested posts since some might be irrelevant
+                target_posts = max_posts * 2
+                if post_count < target_posts:
+                    logger.warning(f"⚠️ Only found {post_count} posts, trying to get {target_posts}")
+                # Return more posts than requested to account for irrelevant ones
+                return post_urls[:target_posts]
 
             except Exception as e:
                 logger.error(f"❌ Error scraping search results: {str(e)}")
