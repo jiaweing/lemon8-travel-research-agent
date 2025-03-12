@@ -1,124 +1,51 @@
-from typing import List, Dict, Tuple, Optional
-import os
-from langchain.prompts import PromptTemplate
-from langchain_openai import ChatOpenAI
+"""Main relevance checker agent module."""
+
+from typing import Tuple
 from src.utils.logging_config import setup_logging, get_logger
+from .relevance_checker.evaluator import RelevanceEvaluator
 
 # Setup logging
 setup_logging()
-logger = get_logger('RelevanceChecker')
+logger = get_logger('RelevanceCheckerAgent')
 
 class Lemon8RelevanceCheckerAgent:
+    """Main agent for checking content relevance."""
+
     def __init__(self):
-        """Initialize the relevance checker agent"""
+        """Initialize the relevance checker agent."""
         logger.info("🤖 Initializing Lemon8RelevanceCheckerAgent")
-        
-        self.llm = ChatOpenAI(
-            model_name="gpt-4o-mini",
-            temperature=0.2,  # Very low temperature for consistent evaluations
-        )
-        
-        self.relevance_prompt = PromptTemplate(
-            input_variables=["content", "query"],
-            template="""Evaluate if this content provides valuable information for the query: "{query}"
+        self.evaluator = RelevanceEvaluator()
 
-CONTENT:
-{content}
-
-CRITICAL VALIDATION:
-1. First extract primary location(s) mentioned in the content
-2. Check if those locations match or relate to the query location
-3. Verify the content has actual meaningful information about those locations
-4. REJECT content that:
-   - Only mentions query location in metadata/UI
-   - Has no specific location details/tips/recommendations
-   - Is about a completely different location
-
-Evaluate:
-1. Relevance (0-1): How well does this content match the query intent?
-2. Value: What makes this content useful for the query?
-3. Gaps: What key aspects of the query does it not address?
-
-RETURN A TUPLE OF THREE VALUES:
-
-(
-bool (is_relevant),  # True if overall score > 0.6
-float (score),      # Relevance score between 0-1
-str (reason)        # Explanation of value/gaps
-)
-
-FORMAT:
-(True/False, 0.XX, "Explanation")
-
-Examples of good explanations:
-- "Provides detailed first-hand experience of [topic] (score: 0.85)"
-- "Limited coverage of [topic], mostly focuses on unrelated aspects (score: 0.35)"
-- "Comprehensive guide about [topic] with specific details (score: 0.95)"
-"""
-        )
-
-    async def check_relevance(self, content_path: str, query: str, threshold: float = 0.6) -> Tuple[bool, float, str]:
-        """
-        Check if content is relevant to the query
+    async def check_relevance(
+        self,
+        content_path: str,
+        query: str,
+        threshold: float = 0.6
+    ) -> Tuple[bool, float, str]:
+        """Check if content is relevant to the query.
         
         Args:
-            content_path: Path to content file
-            query: Search query to check relevance against
-            threshold: Minimum relevance score (0-1)
+            content_path (str): Path to content file
+            query (str): Search query to check relevance against
+            threshold (float, optional): Minimum relevance score (0-1). Defaults to 0.6.
             
         Returns:
-            Tuple of (is_relevant, score, reason)
+            Tuple[bool, float, str]: (meets_threshold, score, reason)
         """
         try:
-            # Read content file
-            with open(content_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-
-            # Trim content if it starts with Related posts/topics
-            for marker in ["# Related posts", "# Related topics"]:
-                if marker in content:
-                    content = content[:content.index(marker)].strip()
+            logger.info(f"🔍 Checking relevance for '{content_path}' against query: {query}")
             
-            # Format prompt
-            prompt = self.relevance_prompt.format(
-                content=content,
-                query=query
+            # Delegate to evaluator
+            result = await self.evaluator.evaluate_content(
+                content_path=content_path,
+                query=query,
+                threshold=threshold
             )
             
-            # Debug log the content being checked
-            logger.debug("🔍 CHECKING CONTENT:")
-            logger.debug("-" * 80)
-            logger.debug(content[:500] + "..." if len(content) > 500 else content)
-            logger.debug("-" * 80)
-            logger.debug(f"🔎 QUERY: {query}")
-            
-            # Get evaluation
-            response = self.llm.invoke(prompt)
-            
-            if not hasattr(response, 'content'):
-                logger.error("❌ No content in response")
-                return False, 0.0, "Failed to evaluate content"
-            
-            # Parse response - expected format: (True/False, 0.XX, "reason")
-            try:
-                # Remove any markdown formatting
-                clean_response = response.content.strip('`() \n')
-                
-                # Split parts and handle formatting
-                parts = clean_response.split(',', 2)
-                
-                is_relevant = parts[0].strip().lower() == 'true'
-                score = float(parts[1].strip())
-                reason = parts[2].strip().strip('"\'')
-                
-                logger.info(f"✅ Relevance check: {score:.2f} - {reason}")
-                return bool(score >= threshold), score, reason
-                
-            except Exception as e:
-                logger.error(f"❌ Failed to parse response: {str(e)}")
-                logger.error(f"Response was: {response.content}")
-                return False, 0.0, f"Error parsing response: {str(e)}"
+            logger.info("✅ Relevance check complete")
+            return result
             
         except Exception as e:
-            logger.error(f"❌ Relevance check failed: {str(e)}")
-            return False, 0.0, str(e)
+            error_msg = f"❌ Relevance check failed: {str(e)}"
+            logger.error(error_msg)
+            return False, 0.0, error_msg
