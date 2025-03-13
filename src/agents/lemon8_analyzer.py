@@ -59,9 +59,10 @@ class Lemon8AnalyzerAgent:
             # Generate analysis
             analysis = await self.analysis_generator.generate_analysis(clean_content, source_url)
 
-            # Get screenshot path if available
+            # Get screenshot path
+            content_dir = os.path.dirname(content_path)
             content_hash = os.path.basename(content_path).split('_')[0]
-            screenshot_path = f"/{os.path.dirname(content_path)}/{content_hash}.png"
+            screenshot_path = os.path.join(content_dir, f"{content_hash}.png")
 
             # Build and save report
             content_preview = clean_content[:200] + "..." if len(clean_content) > 200 else clean_content
@@ -71,7 +72,7 @@ class Lemon8AnalyzerAgent:
                 source_url=source_url,
                 content_preview=content_preview,
                 content_length=len(clean_content),
-                screenshot_path=screenshot_path
+                screenshot_path=screenshot_path if os.path.exists(screenshot_path) else None
             )
 
             logger.info(f"✅ Analysis completed: {report_path}")

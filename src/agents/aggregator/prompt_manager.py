@@ -58,6 +58,8 @@ OUTPUT FORMAT:
 
 ---
 
+[FOR EVERY LOCATION MENTIONED, NOT JUST IN THE TOP RECOMMENDATIONS, DO THE FOLLOWING]
+
 ## [Location Name]
 ![Best Available Image](highest_quality_image_url)
 
