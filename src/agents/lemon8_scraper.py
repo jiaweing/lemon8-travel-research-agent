@@ -13,7 +13,6 @@ from .scraper.crawler_config import CrawlerSettings, SearchConfig, PostConfig
 from .scraper.utils.url_utils import (
     is_valid_post_url,
     get_search_url,
-    extract_post_urls
 )
 from .scraper.utils.image_utils import process_screenshot
 from .scraper.utils.content_utils import (
@@ -55,13 +54,6 @@ class Lemon8ScraperAgent:
         os.makedirs(self.output_dir, exist_ok=True)
         os.makedirs(self.metadata_dir, exist_ok=True)
         
-        # Initialize crawler with base settings
-        self.crawler = AsyncWebCrawler(
-            config=CrawlerSettings.get_browser_config(),
-            timeout=CrawlerSettings.TIMEOUT,
-            use_stealth_js=True
-        )
-        
         logger.info("🤖 Initialized Lemon8ScraperAgent")
         
     def _get_content_paths(self, url: str) -> tuple[str, str]:
@@ -93,38 +85,43 @@ class Lemon8ScraperAgent:
     async def scrape_search_results(
         self,
         query: str,
-        max_posts: int = 5
+        max_posts: int = 5,
     ) -> List[str]:
         """Scrape Lemon8 search results for a query."""
         url = get_search_url(query)
         logger.info(f"🔎 Starting content scraping for query: {query}")
+        
+        results = []
+        async with AsyncWebCrawler(timeout=CrawlerSettings.TIMEOUT, use_stealth_js=True) as crawler:
+            async for result in await crawler.arun(url=url, config=SearchConfig.get_config(query, max_posts=max_posts)):
+                results.append(result)
+                score = result.metadata.get("score", 0)
+                depth = result.metadata.get("depth", 0)
+                print(f"Depth: {depth} | Score: {score:.2f} | {result.url}")
 
-        async with self.crawler as crawler:
-            try:
-                result = await crawler.arun(
-                    url=url,
-                    config=SearchConfig.get_config(max_posts)
-                )
-                
-                # Extract post URLs
-                post_urls = extract_post_urls(result.html)
-                post_count = len(post_urls)
-                
-                logger.info(f"✅ Found {post_count} posts for query: {query}")
-                return post_urls[:max_posts]
+        # Analyze the results
+        print(f"Crawled {len(results)} high-value pages")
+        print(f"Average score: {sum(r.metadata.get('score', 0) for r in results) / len(results):.2f}")
 
-            except Exception as e:
-                logger.error(f"❌ Error scraping search results: {str(e)}")
-                return []
+        # Group by depth
+        depth_counts = {}
+        for result in results:
+            depth = result.metadata.get("depth", 0)
+            depth_counts[depth] = depth_counts.get(depth, 0) + 1
 
+        print("Pages crawled by depth:")
+        for depth, count in sorted(depth_counts.items()):
+            print(f"  Depth {depth}: {count} pages")
+            
+        return [result.url for result in results]
+    
     async def scrape_post(
         self,
         post_url: str,
-        max_related: int = 5
     ) -> Dict[str, str]:
         """Scrape content from a Lemon8 post URL."""
         if not is_valid_post_url(post_url):
-            logger.error(f"❌ Invalid post URL format: {post_url}")
+            logger.info(f"❌ Invalid post URL format: {post_url}")
             return {}
             
         if post_url in self.seen_urls:
@@ -133,7 +130,11 @@ class Lemon8ScraperAgent:
             
         logger.info(f"📥 Scraping post content: {post_url}")
         
-        async with self.crawler as crawler:
+        async with AsyncWebCrawler(
+            config=CrawlerSettings.get_browser_config(),
+            timeout=CrawlerSettings.TIMEOUT,
+            use_stealth_js=True
+        ) as crawler:
             try:
                 # Get content paths
                 content_path, screenshot_path = self._get_content_paths(post_url)
@@ -195,18 +196,11 @@ class Lemon8ScraperAgent:
                 except IOError as e:
                     logger.error(f"💾 Failed to save content: {str(e)}")
                     return {}
-
-                # Extract related posts
-                related_posts = extract_post_urls(result.html)[:max_related]
-                
-                # Mark as scraped
-                self.seen_urls.add(post_url)
                 
                 return {
                     "url": post_url,
                     "content_path": content_path,
                     "screenshot_path": final_screenshot_path,
-                    "related_posts": related_posts
                 }
 
             except Exception as e:

@@ -186,7 +186,7 @@ class Lemon8TravelCLI:
             progress.show_initial_config(self.run_id, self.output_dir)
             
             # Find relevant posts
-            posts = await self.scraper.scrape_search_results(query, max_posts=num_posts)
+            posts = await self.scraper.scrape_search_results(query, num_posts)
             if not posts:
                 print("❌ No relevant content found")
                 return
