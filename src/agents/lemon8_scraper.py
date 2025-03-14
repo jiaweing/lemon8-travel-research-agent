@@ -99,9 +99,14 @@ class Lemon8ScraperAgent:
                 depth = result.metadata.get("depth", 0)
                 print(f"Depth: {depth} | Score: {score:.2f} | {result.url}")
 
-        # Analyze the results
-        print(f"Crawled {len(results)} high-value pages")
-        print(f"Average score: {sum(r.metadata.get('score', 0) for r in results) / len(results):.2f}")
+            total_pages = len(results)
+            # Emit signal for progress tracker to update max sources
+            print(f"✨ Found {total_pages} potential sources")
+            
+            # Analyze the results
+            avg_score = sum(r.metadata.get('score', 0) for r in results) / total_pages
+            print(f"Crawled {total_pages} high-value pages")
+            print(f"Average score: {avg_score:.2f}")
 
         # Group by depth
         depth_counts = {}

@@ -59,10 +59,18 @@ class Lemon8AnalyzerAgent:
             # Generate analysis
             analysis = await self.analysis_generator.generate_analysis(clean_content, source_url)
 
-            # Get screenshot path
-            content_dir = os.path.dirname(content_path)
-            content_hash = os.path.basename(content_path).split('_')[0]
-            screenshot_path = os.path.join(content_dir, f"{content_hash}.png")
+            # Get screenshot path from metadata and ensure it exists
+            screenshot_path = None
+            if 'screenshot' in metadata:
+                screenshot_dir = os.path.dirname(content_path)
+                screenshot_path = os.path.join(screenshot_dir, metadata['screenshot'])
+                # Normalize path to use forward slashes
+                screenshot_path = screenshot_path.replace('\\', '/')
+                if not os.path.exists(screenshot_path):
+                    logger.warning(f"⚠️ Screenshot not found at {screenshot_path}")
+                    screenshot_path = None
+                else:
+                    logger.debug(f"📸 Found screenshot at {screenshot_path}")
 
             # Build and save report
             content_preview = clean_content[:200] + "..." if len(clean_content) > 200 else clean_content

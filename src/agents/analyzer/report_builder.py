@@ -55,7 +55,7 @@ class ReportBuilder:
             # Format report content
             report = f"""# {title}
 
-{f'![Screenshot]({screenshot_path})' if screenshot_path else ''}
+{f'![Screenshot]({screenshot_path.replace("\\", "/")})'  if screenshot_path else ''}
 
 {analysis}
 

@@ -23,15 +23,65 @@ class AggregationPromptManager:
         """
         return PromptTemplate(
             input_variables=["current_report", "new_reports", "query"],
-            template="""You are an expert content curator specializing in synthesizing location-based reviews into comprehensive, trustworthy guides. Analyze and combine information from multiple reviews about {query}.
+            template="""You are an expert content curator specializing in synthesizing location/activity-based reviews into comprehensive, trustworthy guides. Analyze and combine information from multiple reviews about {query}.
 
 SYNTHESIS APPROACH:
-1. Cross-validate information across reviews
-2. Weight recent reviews more heavily
-3. Identify patterns in experiences and recommendations
-4. Aggregate pricing data with dates for accuracy
-5. Consolidate practical tips and warnings
-6. Preserve unique insights while focusing on consensus
+Each section of the report must be updated using search/replace blocks that specify EXACTLY what text to find and replace. Follow these patterns:
+
+1. For Stats Updates:
+   ```
+   <<<<<<< SEARCH
+   ## Quick Stats 📊
+   [entire stats section]
+   =======
+   ## Quick Stats 📊
+   [updated stats section with new totals]
+   >>>>>>> REPLACE
+   ```
+
+2. For Section Updates:
+   ```
+   <<<<<<< SEARCH
+   ## [Section Name]
+   [entire current section content]
+   =======
+   ## [Section Name]
+   [updated section content with new information merged in]
+   >>>>>>> REPLACE
+   ```
+
+3. For Empty Sections:
+   ```
+   <<<<<<< SEARCH
+   ## [Section Name]
+   *No [section topic] yet*
+   =======
+   ## [Section Name]
+   [new content for the section]
+   >>>>>>> REPLACE
+   ```
+
+IMPORTANT RULES:
+1. Content Structure:
+   - MUST include all standard sections: Quick Stats, Top Recommendations, Popular Attractions, etc.
+   - Each section should be complete and detailed
+   - When updating a section, include ALL existing valid content plus new information
+
+2. Update Strategy:
+   - Search/Replace blocks must match content EXACTLY, including whitespace
+   - One search/replace block per section that needs updating
+   - Keep sections that don't have new information unchanged
+
+3. Content Quality:
+   - Include specific details, prices, times, and locations
+   - ALL stats must be accurate and based on the actual reviews
+   - Keep all valid information from previous version
+   - Properly attribute information to sources
+
+4. Formatting:
+   - Maintain consistent emoji usage in headers
+   - Use markdown formatting for emphasis and lists
+   - Keep the overall structure clean and readable
 
 CURRENT REPORT:
 {current_report}
@@ -41,31 +91,16 @@ NEW REPORTS TO ANALYZE:
 
 OUTPUT FORMAT:
 
-# {query} - Curated Guide
+# {query}
 [2-3 sentence overview of the area/category, highlighting key trends and patterns discovered across reviews]
 
-## Quick Stats 📊
-- **Total Places Reviewed:** [Number]
-- **Review Period:** [Earliest] to [Latest]
-- **Aggregate Reviews:** [Total number of unique reviews analyzed]
-- **Price Range:** [Min]-[Max] SGD across all venues
-- **Most Reviewed Areas:** [List top 3 neighborhoods/districts]
+[INCLUDE EVERY LOCATION/ACTIVITY MENTIONED]
 
-## Top Recommendations 🏆
-[List of top 3-5 most consistently praised places, sorted by review frequency and rating]
-1. [Name] - [One-line value proposition] - [X/Y reviews recommend]
-2. [Continue format]
-
----
-
-[FOR EVERY LOCATION MENTIONED, NOT JUST IN THE TOP RECOMMENDATIONS, DO THE FOLLOWING]
-
-## [Location Name]
-![Best Available Image](highest_quality_image_url)
-
+## [Location/Activity Name]
 ### Consensus Analysis 📈
-- **Overall Rating:** [X.X/5.0] (Weighted average from [Y] reviews)
-- **Recommendation Rate:** [X] out of [Y] reviewers recommend
+- **Overall Rating:** [X.X/5.0] (based on [EXACT NUMBER] reviews)
+- **Review Count:** [EXACT NUMBER] reviews
+- **Recommendation Rate:** [EXACT NUMBER] out of [TOTAL REVIEWS] reviewers recommend
 - **Price Consistency:** [High/Medium/Low] (noting price variations)
 - **Experience Rating:** [% positive experiences]
 - **Reviewer Agreement:** [Strong/Moderate/Mixed] on key aspects
@@ -85,7 +120,6 @@ OUTPUT FORMAT:
 ### Key Highlights ✨
 [3-4 most consistently mentioned positive aspects]
 - [Feature]: [Number of mentions] - [Synthesized description]
-![Supporting Image](relevant_image_url)
 [Additional validated highlights with evidence]
 
 ### Visitor Experience 🎭
@@ -103,13 +137,8 @@ OUTPUT FORMAT:
 
 ### Watch Out For ⚠️
 [Common challenges or concerns mentioned across reviews]
-- [Issue 1]: [Frequency of mention] - [Consolidated advice]
+- [Issue 1]: [Frequency of mention in context] - [Consolidated advice]
 [Continue for significant issues]
-
-### Photo Evidence 📸
-[Include 2-3 best images that validate key points]
-![Detail Image](detail_image_url)
-[Caption explaining significance and source]
 
 ---
 
@@ -129,12 +158,7 @@ QUALITY CONTROL CHECKLIST:
    - Note sponsored/promotional content
    - Consider reviewer expertise
 
-4. Visual Documentation
-   - Use recent, relevant images
-   - Preserve image quality
-   - Caption with context
-
-5. Practical Value
+4. Practical Value
    - Focus on actionable information
    - Include specific prices and times
    - Provide clear recommendations"""

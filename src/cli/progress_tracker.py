@@ -10,21 +10,30 @@ logger = get_logger('ProgressTracker')
 class ProgressTracker:
     """Tracks and reports progress during guide generation."""
 
-    def __init__(self, query: str, content_type: Dict[str, str], target_posts: int, multiplier: int = 3):
+    def __init__(self, query: str, content_type: Dict[str, str], target_posts: int, multiplier: int = 10):
         """Initialize the progress tracker.
 
         Args:
             query (str): Search query
             content_type (Dict[str, str]): Selected content type
             target_posts (int): Target number of relevant posts
-            multiplier (int, optional): Max sources multiplier. Defaults to 3.
+            multiplier (int, optional): Max sources multiplier. Defaults to 10.
         """
         self.query = query
         self.content_type = content_type
         self.target_posts = target_posts
-        self.max_sources = target_posts * multiplier
+        self._initial_max = target_posts * multiplier  # Store initial max for reference
+        self.max_sources = self._initial_max
         self.sources_reviewed = 0
         self.relevant_posts = 0
+
+    def update_max_sources(self, total_sources: int) -> None:
+        """Update the maximum number of sources after crawling.
+
+        Args:
+            total_sources (int): Total number of sources found during crawling
+        """
+        self.max_sources = total_sources
 
     def show_initial_config(self, run_id: str, output_dir: str) -> None:
         """Display initial configuration.

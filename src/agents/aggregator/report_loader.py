@@ -1,7 +1,7 @@
 """Report loading and batching module."""
 
 import os
-from typing import List, Dict
+from typing import Dict, Optional, List
 from src.utils.logging_config import setup_logging, get_logger
 
 # Setup logging
@@ -26,44 +26,66 @@ class ReportLoader:
         
         logger.info(f"📁 Initialized report loader with output_dir: {output_dir}")
 
-    def load_reports(self, batch_size: int = 5) -> List[List[Dict[str, str]]]:
-        """Load reports in batches.
-
-        Args:
-            batch_size (int, optional): Number of reports per batch. Defaults to 5.
+    def load_latest_report(self) -> Optional[Dict[str, str]]:
+        """Load the most recent report.
 
         Returns:
-            List[List[Dict[str, str]]]: List of batches, each containing reports
+            Optional[Dict[str, str]]: Most recent report data or None if no reports exist
         """
-        logger.info(f"📂 Loading posts from {self.posts_dir}")
+        logger.info(f"📂 Loading latest report from {self.posts_dir}")
         try:
-            all_reports = []
-            batch = []
+            # Get list of report files sorted by modification time (newest first)
+            files = [(f, os.path.getmtime(os.path.join(self.posts_dir, f))) 
+                    for f in os.listdir(self.posts_dir) if f.endswith('.md')]
             
-            # Load reports in sorted order
-            for filename in sorted(os.listdir(self.posts_dir)):
-                if filename.endswith('.md'):
-                    report = self._load_single_report(filename)
-                    if report:
-                        batch.append(report)
-                        
-                    if len(batch) >= batch_size:
-                        all_reports.append(batch)
-                        batch = []
-            
-            # Add any remaining reports
-            if batch:
-                all_reports.append(batch)
+            if not files:
+                logger.info("No reports found")
+                return None
                 
-            logger.info(f"📄 Loaded {sum(len(batch) for batch in all_reports)} reports in {len(all_reports)} batches")
-            return all_reports
+            # Get the most recently modified file
+            latest_file = max(files, key=lambda x: x[1])[0]
+            report = self._load_single_report(latest_file)
+            
+            if report:
+                logger.info(f"📄 Loaded latest report: {latest_file}")
+                return report
+            return None
+            
+        except Exception as e:
+            error_msg = f"❌ Failed to load latest report: {str(e)}"
+            logger.error(error_msg)
+            return None
 
+    def load_all_reports(self) -> List[Dict[str, str]]:
+        """Load all available reports.
+
+        Returns:
+            List[Dict[str, str]]: List of all report data
+        """
+        logger.info(f"📂 Loading all reports from {self.posts_dir}")
+        try:
+            # Get list of all report files
+            files = [f for f in os.listdir(self.posts_dir) if f.endswith('.md')]
+            
+            if not files:
+                logger.info("No reports found")
+                return []
+            
+            reports = []
+            for filename in files:
+                report = self._load_single_report(filename)
+                if report:
+                    reports.append(report)
+                    
+            logger.info(f"📄 Loaded {len(reports)} reports")
+            return reports
+            
         except Exception as e:
             error_msg = f"❌ Failed to load reports: {str(e)}"
             logger.error(error_msg)
             raise
 
-    def _load_single_report(self, filename: str) -> Dict[str, str]:
+    def _load_single_report(self, filename: str) -> Optional[Dict[str, str]]:
         """Load a single report file.
 
         Args:
@@ -77,7 +99,7 @@ class ReportLoader:
             with open(filepath, 'r', encoding='utf-8') as f:
                 return {
                     'content': f.read(),
-                    'filename': filename
+                    'filename': filepath
                 }
 
         except Exception as e:

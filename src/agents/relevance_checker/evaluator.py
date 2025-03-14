@@ -22,7 +22,7 @@ class RelevanceEvaluator:
         self.prompt_manager = RelevancePromptManager()
         self.response_parser = ResponseParser()
         self.llm = ChatOpenAI(
-            model_name="gpt-4o-mini",
+            model_name=Config.MODEL_NAME,
             temperature=0.2,  # Low temperature for consistent evaluations
         )
 

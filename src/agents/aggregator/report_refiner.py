@@ -1,8 +1,10 @@
 """Report refinement and synthesis module."""
 
 from typing import List, Dict
+from datetime import datetime
 from langchain_openai import ChatOpenAI
 from crewai import Agent
+from config import Config
 from src.utils.logging_config import setup_logging, get_logger
 from .prompt_manager import AggregationPromptManager
 
@@ -27,8 +29,8 @@ class ReportRefiner:
 
         self.prompt_manager = AggregationPromptManager()
         self.llm = ChatOpenAI(
-            model_name="gpt-4o-mini",
-            temperature=0.7,  # Allow some creativity in synthesis
+            model_name=Config.MODEL_NAME,
+            temperature=0.3,  # Lower temperature for more consistent outputs
         )
 
     def _join_batch_content(self, batch: List[Dict[str, str]]) -> str:
@@ -100,6 +102,58 @@ class ReportRefiner:
         """
         return f"""# {query}
 
-A guide to help you explore the best cafes and restaurants.
+Discover the best experiences this destination has to offer, backed by authentic reviews and local insights.
 
+## Quick Stats 📊
+- **Total Places Listed:** 0
+- **Reviews Analyzed:** 0
+- **Average Rating:** N/A
+- **Price Range:** N/A
+
+## Top Recommendations
+*No recommendations yet - analyzing first review*
+
+## Popular Attractions 🏛️
+*No attractions analyzed yet*
+
+## Dining and Food Scene 🍽️
+*No dining information yet*
+
+## Cultural Experiences 🎭
+*No cultural experiences analyzed yet*
+
+## Shopping and Markets 🛍️
+*No shopping information yet*
+
+## Transportation Tips 🚇
+*No transportation tips yet*
+
+## Accommodation Guide 🏨
+*No accommodation information yet*
+
+## Best Photo Spots 📸
+*No photo spots analyzed yet*
+
+## Safety and Tips 💡
+*No safety information yet*
+
+## Hidden Gems 💎
+*No hidden gems discovered yet*
+
+## Seasonal Highlights 🌸
+*No seasonal information yet*
+
+## Budget Planning 💰
+*No budget information yet*
+
+---
+
+### Destination Insights
+- **Best Time to Visit:** *Analyzing...*
+- **Average Visit Duration:** *Analyzing...*
+- **Language Tips:** *Analyzing...*
+- **Local Customs:** *Analyzing...*
+
+---
+Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """

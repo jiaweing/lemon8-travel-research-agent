@@ -145,26 +145,23 @@ class Lemon8TravelCLI:
         """
         try:
             print("\n📝 Generating detailed travel insights...")
-            report_paths = []
-            
-            # Analyze each relevant post
             relevant_results = [r for r in results if r.get('is_relevant', False)]
+            aggregator = ReportAggregatorAgent(run_id=self.run_id)
+            guide_path = os.path.join(self.output_dir, f"{query.replace(' ', '_')}.md")
+            
+            # Process one post at a time and update guide
             for result in relevant_results:
                 if 'content_path' in result:
                     try:
                         report_path = await self.analyzer.analyze_content(result['content_path'])
-                        report_paths.append(report_path)
                         print(f"✅ Processed: {os.path.basename(result['content_path'])}")
+                        
+                        # Update guide with new content
+                        await aggregator.generate_final_report(query)
                     except Exception as e:
                         logger.error(f"❌ Analysis failed: {str(e)}")
-            
-            # Generate final guide
-            if report_paths:
-                print("\n🏗️ Creating your travel guide...")
-                aggregator = ReportAggregatorAgent(run_id=self.run_id)
-                return await aggregator.generate_final_report(query)
-            
-            return None
+
+            return guide_path if os.path.exists(guide_path) else None
 
         except Exception as e:
             logger.error(f"❌ Guide generation failed: {str(e)}")
@@ -191,7 +188,8 @@ class Lemon8TravelCLI:
                 print("❌ No relevant content found")
                 return
             
-            print(f"✨ Found {len(posts)} potential sources")
+            # Update progress tracker with actual number of sources
+            progress.update_max_sources(len(posts))
             
             # Analyze posts
             results = await self._scrape_posts(posts, query, content_type, progress)
