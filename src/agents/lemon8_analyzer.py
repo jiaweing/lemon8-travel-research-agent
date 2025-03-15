@@ -62,14 +62,14 @@ class Lemon8AnalyzerAgent:
             # Get screenshot path from metadata and ensure it exists
             screenshot_path = None
             if 'screenshot' in metadata:
-                screenshot_path = os.path.join("..", metadata['screenshot'])
+                screenshot_path = os.path.join("../metadata", metadata['screenshot'])
                 # Normalize path to use forward slashes
                 screenshot_path = screenshot_path.replace('\\', '/')
-                if not os.path.exists(screenshot_path):
-                    logger.warning(f"⚠️ Screenshot not found at {screenshot_path}")
-                    screenshot_path = None
-                else:
-                    logger.debug(f"📸 Found screenshot at {screenshot_path}")
+                # if not os.path.exists(screenshot_path):
+                #     logger.warning(f"⚠️ Screenshot not found at {screenshot_path}")
+                #     screenshot_path = None
+                # else:
+                #     logger.debug(f"📸 Found screenshot at {screenshot_path}")
 
             # Build and save report
             content_preview = clean_content[:200] + "..." if len(clean_content) > 200 else clean_content
@@ -79,7 +79,7 @@ class Lemon8AnalyzerAgent:
                 source_url=source_url,
                 content_preview=content_preview,
                 content_length=len(clean_content),
-                screenshot_path=screenshot_path if os.path.exists(screenshot_path) else None
+                screenshot_path=screenshot_path
             )
 
             logger.info(f"✅ Analysis completed: {report_path}")

@@ -64,8 +64,8 @@ A team of agents that analyzes real travel experiences from Lemon8 to create det
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-username/lemon8-agent.git
-cd lemon8-agent
+git clone https://github.com/jiaweing/lemon8-travel-research-agent.git
+cd lemon8-travel-research-agent
 
 # 2. Install dependencies
 # Using poetry (recommended):

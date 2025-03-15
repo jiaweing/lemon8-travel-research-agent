@@ -62,23 +62,31 @@ Each section of the report must be updated using search/replace blocks that spec
    ```
 
 IMPORTANT RULES:
-1. Content Structure:
+1. CRITICAL - Location Preservation:
+    - NEVER remove or omit any previously listed locations
+    - Each location mentioned in current_report MUST be preserved
+    - New locations should be ADDED to existing ones
+    - Update information about existing locations but NEVER delete them
+    - Count and verify that all locations are preserved after merging
+
+2. Content Structure:
    - MUST include all standard sections: Quick Stats, Top Recommendations, Popular Attractions, etc.
    - Each section should be complete and detailed
-   - When updating a section, include ALL existing valid content plus new information
+   - When updating a section, include ALL existing locations/places plus new ones
 
-2. Update Strategy:
+3. Update Strategy:
    - Search/Replace blocks must match content EXACTLY, including whitespace
    - One search/replace block per section that needs updating
    - Keep sections that don't have new information unchanged
 
-3. Content Quality:
+4. Content Quality:
    - Include specific details, prices, times, and locations
    - ALL stats must be accurate and based on the actual reviews
    - Keep all valid information from previous version
+    - Double-check that no locations were accidentally removed
    - Properly attribute information to sources
 
-4. Formatting:
+5. Formatting:
    - Maintain consistent emoji usage in headers
    - Use markdown formatting for emphasis and lists
    - Keep the overall structure clean and readable

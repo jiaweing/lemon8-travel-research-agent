@@ -139,7 +139,7 @@ class ReportWriter:
         search_pattern = (re.escape(normalized_search)
                          .replace(r'\ ', r'\s+')
                          .replace(r'\n', r'\s*\n\s*'))
-        result = re.sub(search_pattern, replace, normalized_content, count=1)
+        result = re.sub(search_pattern, replace, normalized_content)  # Removed count=1 to replace all occurrences
         
         # Return original if no replacement made
         return result if result != normalized_content else content
