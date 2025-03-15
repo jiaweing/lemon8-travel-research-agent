@@ -62,8 +62,7 @@ class Lemon8AnalyzerAgent:
             # Get screenshot path from metadata and ensure it exists
             screenshot_path = None
             if 'screenshot' in metadata:
-                screenshot_dir = os.path.dirname(content_path)
-                screenshot_path = os.path.join(screenshot_dir, metadata['screenshot'])
+                screenshot_path = os.path.join("..", metadata['screenshot'])
                 # Normalize path to use forward slashes
                 screenshot_path = screenshot_path.replace('\\', '/')
                 if not os.path.exists(screenshot_path):
